@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Market Detector Collector</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Syne:wght@700;800&display=swap');
+:root{
+  --bg:#080b0f;--bg2:#0d1117;--bg3:#131920;--bg4:#1a2230;
+  --border:rgba(255,255,255,0.06);--border2:rgba(255,255,255,0.12);
+  --text:#e2e8f0;--sub:#8892a4;--muted:#3d4d5f;
+  --green:#00ff88;--red:#ff3355;--blue:#00aaff;--amber:#ffaa00;
+  --mono:'JetBrains Mono',monospace;--sans:'Syne',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:var(--mono);background:var(--bg);color:var(--text);min-height:100vh;font-size:12px;}
+.header{padding:16px 28px;background:var(--bg2);border-bottom:1px solid var(--border2);display:flex;align-items:center;gap:16px;}
+.logo{font-family:var(--sans);font-size:20px;font-weight:800;color:var(--text);}
+.layout{display:flex;height:calc(100vh - 57px);}
+.side{width:290px;flex-shrink:0;background:var(--bg2);border-right:1px solid var(--border);overflow-y:auto;padding:16px;}
+.main{flex:1;padding:20px 24px;overflow-y:auto;}
+.slabel{font-size:8px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.12em;display:block;margin-bottom:6px;}
+input,select{width:100%;padding:7px 10px;background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-family:var(--mono);font-size:11px;border-radius:5px;outline:none;margin-bottom:10px;}
+input:focus,select:focus{border-color:var(--green);}
+select option{background:var(--bg3);}
+.btn{padding:9px 14px;border-radius:5px;cursor:pointer;font-size:11px;font-family:var(--mono);font-weight:700;border:1px solid;transition:all .15s;text-transform:uppercase;letter-spacing:.05em;width:100%;text-align:center;margin-bottom:6px;}
+.btn-green{border-color:var(--green);color:var(--green);background:rgba(0,255,136,0.07);}
+.btn-red{border-color:var(--red);color:var(--red);background:rgba(255,51,85,0.07);}
+.btn-blue{border-color:var(--blue);color:var(--blue);background:rgba(0,170,255,0.07);}
+.btn-amber{border-color:var(--amber);color:var(--amber);background:rgba(255,170,0,0.07);}
+.btn:hover{opacity:.8;transform:translateY(-1px);}
+.btn:disabled{opacity:.4;cursor:not-allowed;transform:none;}
+.card{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:16px 18px;margin-bottom:14px;}
+.card-title{font-size:11px;font-weight:700;color:var(--text);margin-bottom:12px;text-transform:uppercase;letter-spacing:.06em;}
+.prog-wrap{display:none;background:var(--bg3);border:1px solid var(--border2);border-radius:8px;padding:14px 16px;margin-bottom:14px;}
+.prog-bar{height:4px;background:var(--bg4);border-radius:2px;overflow:hidden;margin:7px 0 5px;}
+.prog-fill{height:100%;background:linear-gradient(90deg,var(--green),var(--blue));border-radius:2px;transition:width .3s;}
+.stat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px;}
+.stat{background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:10px 12px;text-align:center;}
+.stat-val{font-size:20px;font-weight:700;font-family:var(--sans);margin:3px 0;}
+.stat-lbl{font-size:8px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;}
+::-webkit-scrollbar{width:3px;height:3px;}
+::-webkit-scrollbar-thumb{background:var(--bg4);border-radius:2px;}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="logo">📡 Market Detector Collector</div>
+  <span style="font-size:10px;color:var(--muted)">marketdetectors endpoint · per saham per hari → Google Sheets</span>
+  <div id="gs-status" style="margin-left:auto;font-size:10px;color:var(--muted)">—</div>
+</div>
+
+<div class="layout">
+<div class="side">
+
+  <span class="slabel">Bearer Token (Stockbit)</span>
+  <input id="token" type="password" placeholder="eyJhbGciO..." oninput="_saveToken()">
+
+  <span class="slabel">Apps Script URL</span>
+  <input id="gs-url" type="text"
+    value="https://script.google.com/macros/s/AKfycbxi9A37sHxY6reUu2xwggMbVmnpnwqWWfPUIa9Q_S7dEgzrhRYs6mw7WZiSdMUIuCAf/exec"
+    style="font-size:9px">
+
+  <span class="slabel">Universe</span>
+  <select id="universe">
+    <option value="lq45">LQ45 (45 saham)</option>
+    <option value="idx80">IDX80 (80 saham)</option>
+    <option value="all" selected>Semua IDX (893+ saham)</option>
+  </select>
+
+  <span class="slabel">Dari Tahun</span>
+  <select id="from-year">
+    <option value="2021">2021</option>
+    <option value="2022">2022</option>
+    <option value="2023">2023</option>
+    <option value="2024" selected>2024</option>
+    <option value="2025">2025</option>
+  </select>
+
+  <span class="slabel">Jeda Request</span>
+  <select id="delay">
+    <option value="300">300ms (~4 jam)</option>
+    <option value="500" selected>500ms (~6 jam)</option>
+    <option value="600">600ms (~8 jam)</option>
+    <option value="900">900ms (~12 jam)</option>
+  </select>
+
+  <span class="slabel">Batch Size ke Sheets</span>
+  <select id="batch-size">
+    <option value="50">50 rows</option>
+    <option value="100" selected>100 rows</option>
+    <option value="200">200 rows</option>
+  </select>
+
+  <button class="btn btn-green" id="run-btn" onclick="_startCollect()">▶ MULAI COLLECT</button>
+  <button class="btn btn-red" id="stop-btn" onclick="_stop()" style="display:none">⏹ STOP</button>
+  <button class="btn btn-blue" onclick="_checkSheets()">📊 CEK SHEETS</button>
+  <button class="btn btn-amber" onclick="_clearSheets()" style="font-size:9px;padding:6px">🗑 Clear Sheets</button>
+
+  <div style="margin-top:12px;padding:8px 10px;background:var(--bg3);border-radius:5px;border:1px solid var(--border);font-size:9px;color:var(--sub);line-height:2">
+    <b style="color:var(--amber)">Endpoint baru:</b><br>
+    marketdetectors per saham per hari<br>
+    Semua broker buy/sell + bandar detector<br>
+    <br>
+    <b style="color:var(--green)">Efisiensi:</b><br>
+    893 saham × ~30 bulan<br>
+    = ~26.790 request<br>
+    @ 500ms = ~3.7 jam<br>
+    <br>
+    <b style="color:var(--green)">Auto-resume:</b><br>
+    Data yang sudah ada tidak di-duplicate
+  </div>
+
+</div>
+
+<div class="main">
+
+  <div class="prog-wrap" id="prog-wrap">
+    <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:4px">
+      <span id="prog-label">Collecting...</span>
+      <span id="prog-pct" style="color:var(--green)">0%</span>
+    </div>
+    <div class="prog-bar"><div class="prog-fill" id="prog-fill" style="width:0%"></div></div>
+    <div style="display:flex;justify-content:space-between;font-size:9px;color:var(--muted);margin-bottom:6px">
+      <span id="prog-detail">—</span>
+      <span id="prog-eta">ETA: —</span>
+    </div>
+    <div style="font-size:9px;color:var(--muted);max-height:80px;overflow-y:auto;line-height:1.9" id="prog-log"></div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat"><div class="stat-lbl">Rows di Sheets</div><div class="stat-val" style="color:var(--blue)" id="stat-rows">—</div></div>
+    <div class="stat"><div class="stat-lbl">Session Rows</div><div class="stat-val" style="color:var(--green)" id="stat-session">0</div></div>
+    <div class="stat"><div class="stat-lbl">Saham Done</div><div class="stat-val" style="color:var(--amber)" id="stat-syms">—</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Progress per Saham</div>
+    <div id="sym-progress" style="display:flex;flex-wrap:wrap;gap:3px;max-height:200px;overflow-y:auto"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Log</div>
+    <div id="main-log" style="font-size:9px;color:var(--muted);line-height:2;max-height:400px;overflow-y:auto"></div>
+  </div>
+
+</div>
+</div>
+
+<script>
+const LQ45 = ['AALI','ADRO','AKRA','AMRT','ANTM','ASII','BBCA','BBNI','BBRI','BBTN','BMRI','BREN','BRPT','BSDE','CPIN','CPRO','CTRA','EMTK','EXCL','GOTO','HEAL','HMSP','HRUM','ICBP','INCO','INDF','INTP','ISAT','ITMG','JSMR','KLBF','MAPI','MBMA','MDKA','MEDC','MIKA','MNCN','MTEL','MYOR','NISP','PGAS','PTBA','SMGR','TLKM','UNTR','UNVR'];
+const IDX80 = [...LQ45,'ADHI','ARNA','ASRI','BNGA','BTPS','DCII','DNET','ERAA','ESSA','GGRM','GOOD','INKP','LSIP','MLBI','NCKL','PGEO','PTPP','PWON','SMRA','TBIG','TINS','TOWR','TPIA','TSPC','WIFI','WIKA','WSKT','WTON'];
+
+const ALL_SYMS = [
+  'AADI','AALI','ABBA','ABDA','ABMM','ACES','ACRO','ACST','ADCP','ADES','ADHI','ADMF','ADMG','ADMR','ADRO','AEGS','AGAR','AGII','AGRO','AGRS',
+  'AHAP','AIMS','AKKU','AKPI','AKRA','AKSI','ALDO','ALII','ALKA','ALMI','AMAG','AMAN','AMAR','AMFG','AMIN','AMMN','AMMS','AMOR','AMRT','ANDI',
+  'ANJT','ANTM','APEX','APIC','APII','APLI','APLN','ARCI','AREA','ARII','ARKA','ARKO','ARNA','ARTA','ARTI','ARTO','ASBI','ASDM','ASGR','ASHA',
+  'ASII','ASJT','ASLC','ASLI','ASMI','ASPI','ASRI','ASRM','ASSA','ATAP','ATIC','ATLA','AUTO','AVIA','AWAN','AXIO','AYAM','AYLS','BABP','BABY',
+  'BACA','BAIK','BAJA','BALI','BANK','BAPA','BAPI','BATA','BATR','BAUT','BAYU','BBCA','BBHI','BBKP','BBLD','BBMD','BBNI','BBRI','BBRM','BBSI',
+  'BBSS','BBTN','BBYB','BCAP','BCIC','BCIP','BDKR','BDMN','BEBS','BEEF','BEER','BELI','BELL','BESS','BEST','BFIN','BGTG','BHAT','BHIT','BIKA',
+  'BIKE','BINA','BINO','BIPI','BIPP','BIRD','BISI','BJBR','BJTM','BKDP','BKSL','BKSW','BLES','BLTA','BLTZ','BLUE','BMAS','BMBL','BMHS','BMRI',
+  'BMSR','BMTR','BNBA','BNBR','BNGA','BNII','BNLI','BOAT','BOBA','BOGA','BOLA','BOLT','BOSS','BPFI','BPII','BPTR','BRAM','BREN','BRIS','BRMS',
+  'BRPT','BRRC','BSBK','BSDE','BSIM','BSML','BSSR','BSWD','BTEK','BTEL','BTON','BTPN','BTPS','BUAH','BUDI','BUKA','BUKK','BULL','BUMI','BUVA',
+  'BVIC','BWPT','BYAN','CAKK','CAMP','CANI','CARE','CARS','CASA','CASH','CASS','CBDK','CBMF','CBPE','CBRE','CBUT','CCSI','CEKA','CENT','CFIN',
+  'CGAS','CHEM','CHIP','CINT','CITA','CITY','CLAY','CLEO','CLPI','CMNP','CMNT','CMPP','CMRY','CNMA','CNTB','CNTX','COAL','COCO','CPIN','CPRI',
+  'CPRO','CRAB','CRSN','CSAP','CSIS','CSMI','CSRA','CTBN','CTRA','CTTH','CUAN','CYBR','DAAZ','DADA','DART','DATA','DAYA','DCII','DEAL','DEFI',
+  'DEPO','DEWI','DFAM','DGIK','DGNS','DGWG','DIGI','DILD','DIVA','DLTA','DMAS','DMMX','DMND','DNET','DOID','DOOH','DOSS','DPNS','DPUM','DRMA',
+  'DSFI','DSNG','DSSA','DUCK','DUTI','DVLA','DWGL','DYAN','EAST','ECII','EDGE','EKAD','ELIT','ELPI','ELSA','EMTK','ENAK','ENVY','ENZO','EPAC',
+  'EPMT','ERAA','ERAL','ERTX','ESIP','ESSA','ESTA','ESTI','ETWA','EURO','EXCL','FAPA','FAST','FASW','FILM','FIMP','FINN','FIRE','FISH','FITT',
+  'FLMC','FMII','FOLK','FOOD','FORZ','FPNI','FREN','FUJI','FUTR','FWCT','GAMA','GDST','GDYR','GEMS','GGRM','GGRP','GHON','GIAA','GJTL','GLVA',
+  'GMFI','GOLD','GOLF','GOOD','GOTO','GOTOM','GPRA','GPSO','GRIA','GRPH','GRPM','GSMF','GTBO','GTRA','GTSI','GULA','GUNA','GZCO','HADE','HAIS',
+  'HAJJ','HALO','HATM','HBAT','HDFA','HDIT','HDTX','HEAL','HELI','HERO','HEXA','HGII','HILL','HITS','HKMU','HMSP','HOKI','HOMI','HOPE','HOTL',
+  'HRME','HRTA','HRUM','HUMI','HYGN','IBFN','IBOS','IBST','ICBP','ICON','IDEA','IDPR','IFII','IFSH','IGAR','IIKP','IKAI','IKAN','IKBI','IKPM',
+  'IMAS','IMJS','IMPC','INAF','INAI','INCF','INCI','INCO','INDF','INDO','INDR','INDS','INDX','INDY','INET','INKP','INOV','INPP','INPS','INRU',
+  'INTA','INTD','INTP','IOTF','IPAC','IPCC','IPCM','IPOL','IPPE','IPTV','IRRA','IRSX','ISAP','ISAT','ISEA','ISSP','ITIC','ITMA','ITMG','JARR',
+  'JAST','JAWA','JAYA','JECC','JGLE','JIHD','JKON','JKSW','JMAS','JPFA','JRPT','JSKY','JSMR','JSPT','JTPE','KAEF','KARW','KAYU','KBAG','KBLI',
+  'KBLM','KBLV','KDSI','KDTN','KEEN','KEJU','KETR','KIAS','KICI','KIJA','KING','KINO','KIOS','KJEN','KKES','KLAS','KLBF','KLIN','KMDS','KMTR',
+  'KOBX','KOCI','KOKA','KONI','KOPI','KOTA','KPAL','KPAS','KPIG','KRAH','KRAS','KREN','KRYA','KSIX','KUAS','LABA','LABS','LAJU','LAND','LCKM',
+  'LEAD','LFLO','LIFE','LINK','LION','LIVE','LMAX','LMPI','LMSH','LOPI','LPCK','LPGI','LPIN','LPKR','LPLI','LPPF','LPPS','LRNA','LSIP','LTLS',
+  'LUCK','LUCY','MABA','MAGP','MAHA','MAIN','MAMIP','MANG','MAPA','MAPB','MAPI','MARI','MARK','MASA','MASB','MAXI','MAYA','MBAP','MBMA','MBSS',
+  'MBTO','MCAS','MCOL','MCOR','MDIA','MDIY','MDKA','MDKI','MDLN','MEDC','MEDS','MEGA','MEJA','MENN','MERK','META','MFIN','MFMI','MGLV','MGNA',
+  'MGRO','MHKI','MICE','MIDI','MIKA','MINA','MIRA','MKAP','MKNT','MKTR','MLBI','MLIA','MLPT','MMIX','MMLP','MNCN','MOLI','MORA','MPIX','MPMX',
+  'MPOW','MPPA','MPRO','MPXL','MRAT','MREI','MSIE','MSIN','MSJA','MSTI','MTDL','MTEL','MTFN','MTLA','MTMH','MTPS','MTRA','MTSM','MTWI','MUTU',
+  'MYOR','MYRX','MYRXP','MYTX','NAIK','NANO','NASA','NASI','NATO','NAYZ','NCKL','NEST','NETV','NFCX','NICE','NICK','NICL','NIKL','NINE','NIPS',
+  'NISP','NOBU','NPGF','NRCA','NSSS','NTBK','NUSA','NZIA','OASA','OBAT','OBMD','OCAP','OILS','OLIV','OMED','OMRE','OPMS','PACK','PADA','PALM',
+  'PAMG','PANI','PANR','PANS','PART','PBID','PBRX','PBSA','PCAR','PDPP','PEGE','PEHA','PEVE','PGAS','PGEO','PGJO','PGLI','PGUN','PICO','PIPA',
+  'PJAA','PLAN','PLAS','PLIN','PMJS','PMMP','PNBN','PNGO','PNIN','PNLF','PNSE','POLA','POLI','POLL','POLU','POLY','POOL','PORT','POSA','POWR',
+  'PPGL','PPRE','PPRI','PPRO','PRAS','PRAY','PRDA','PRIM','PSAB','PSDN','PSGO','PSKT','PSSI','PTBA','PTDU','PTIS','PTMP','PTMR','PTPP','PTPS',
+  'PTPW','PTSN','PTSP','PUDP','PURA','PURE','PURI','PWON','PYFA','PZZA','RAAM','RAFI','RAJA','RALS','RANC','RATU','RCCC','RDTX','REAL','RELF',
+  'RELI','RGAS','RICY','RIGS','RISE','RMBA','RMKE','RMKO','ROCK','RODA','RONY','ROTI','RSCH','RSGK','RUIS','RUNS','SAGE','SAME','SAMF','SAPX',
+  'SATU','SBAT','SBMA','SCCO','SCMA','SCNP','SCPI','SDMU','SDPC','SDRA','SEMA','SFAN','SGER','SGRO','SHID','SHIP','SICO','SIDO','SILO','SIMA',
+  'SIMP','SINI','SIPD','SKBM','SKLT','SKRN','SKYB','SLIS','SMAR','SMBR','SMCB','SMDM','SMDR','SMGA','SMGR','SMIL','SMKL','SMKM','SMLE','SMMA',
+  'SMMT','SMRA','SMSM','SNLK','SOFA','SOHO','SOLA','SOSS','SOTS','SOUL','SPMA','SPRE','SPTO','SRAJ','SRIL','SRSN','SRTG','SSIA','SSMS','SSTM',
+  'STAA','STAR','STRK','STTP','SUGI','SULI','SUNI','SUPR','SURE','SURI','SWAT','SWID','TALF','TAMA','TAMU','TAPG','TAXI','TAYS','TBIG','TBLA',
+  'TBMS','TCID','TCPI','TDPM','TEBE','TECH','TELE','TFAS','TFCO','TGRA','TGUK','TIFA','TINS','TIRA','TIRT','TKIM','TLDN','TLKM','TMAS','TMPO',
+  'TNCA','TOBA','TOOL','TOSK','TOTL','TOTO','TOWR','TOYS','TPIA','TPMA','TRAM','TRGU','TRIL','TRIM','TRIN','TRIO','TRIS','TRJA','TRON','TRST',
+  'TRUE','TRUK','TRUS','TSPC','TUGU','TYRE','UANG','UCID','UDNG','UFOE','ULTJ','UNIC','UNIQ','UNSP','UNTD','UNTR','UNVR','URBN','UVCR','VAST',
+  'VERN','VICI','VICO','VINS','VISI','VKTR','VOKS','VTNY','WEGE','WEHA','WGSH','WICO','WIDI','WIFI','WIIM','WIKA','WINE','WINR','WINS','WIRG',
+  'WOMF','WOOD','WOWS','WSBP','WSKT','WTON','YOII','YPAS','YULE','ZATA','ZBRA','ZINC','ZONE','ZYRX',
+];
+
+
+document.addEventListener('DOMContentLoaded', function(){
+  _loadToken();
+  _checkSheets();
+  _loadAllSyms();
+});
+
+function _saveToken(){ try{ localStorage.setItem('broker_tok', document.getElementById('token').value); }catch(e){} }
+function _loadToken(){ var v=localStorage.getItem('broker_tok')||''; if(v) document.getElementById('token').value=v; }
+function _getToken(){ return document.getElementById('token').value.trim().replace(/[^\x00-\x7F]/g,''); }
+function _getGsUrl(){ return document.getElementById('gs-url').value.trim(); }
+function _sleep(ms){ return new Promise(function(r){ setTimeout(r,ms); }); }
+
+function _getSymbols(){
+  var u = document.getElementById('universe').value;
+  if(u==='lq45') return [...LQ45];
+  if(u==='idx80') return [...IDX80];
+  return [...ALL_SYMS];
+}
+
+function _getMonths(fromYear){
+  var months = [];
+  var now = new Date();
+  var d = new Date(fromYear+'-01-01');
+  while(d <= now){
+    var y = d.getFullYear();
+    var m = String(d.getMonth()+1).padStart(2,'0');
+    var lastDay = new Date(y, d.getMonth()+1, 0).getDate();
+    months.push({
+      from: y+'-'+m+'-01',
+      to:   y+'-'+m+'-'+lastDay,
+      key:  y+'-'+m
+    });
+    d.setMonth(d.getMonth()+1);
+  }
+  return months;
+}
+
+async function _loadExistingKeys(gsUrl){
+  try {
+    _log('Loading existing data keys...', 'ok');
+    var resp = await fetch(gsUrl+'?action=md_keys');
+    var json = await resp.json();
+    if(json.ok && json.keys){
+      _existingKeys = new Set(json.keys);
+      _log('Existing keys: '+_existingKeys.size, 'ok');
+    }
+  } catch(e) {
+    _log('Could not load existing keys: '+e.message, 'warn');
+    _existingKeys = new Set();
+  }
+}
+
+async function _startCollect(){
+  var token = _getToken();
+  if(!token){ alert('Masukkan Bearer Token'); return; }
+  if(_running) return;
+
+  /* Pastikan symbols tersedia */
+  var symbols  = _getSymbols();
+  if(!symbols.length){ alert('Symbols kosong'); return; }
+
+  _running = true;
+  _stopFlag = false;
+  _sessionRows = 0;
+  _startTime = Date.now();
+
+  document.getElementById('run-btn').style.display = 'none';
+  document.getElementById('stop-btn').style.display = 'block';
+  document.getElementById('prog-wrap').style.display = 'block';
+
+  var delay    = parseInt(document.getElementById('delay').value);
+  var batchSz  = parseInt(document.getElementById('batch-size').value);
+  var fromYear = parseInt(document.getElementById('from-year').value);
+  var gsUrl    = _getGsUrl();
+  var symbols  = _getSymbols();
+  var months   = _getMonths(fromYear);
+
+  _log('Symbols: '+symbols.length+' · Months: '+months.length+' · Total: '+(symbols.length*months.length)+' req', 'ok');
+  _log('Estimasi @ '+delay+'ms: ~'+Math.round(symbols.length*months.length*delay/1000/3600*10)/10+' jam', 'ok');
+
+  /* Load existing keys untuk dedup */
+  await _loadExistingKeys(gsUrl);
+
+  /* Render symbol badges */
+  var spEl = document.getElementById('sym-progress');
+  spEl.innerHTML = symbols.map(function(s){
+    return '<span id="sp-'+s+'" style="padding:2px 6px;border-radius:3px;font-size:9px;'+
+      'border:1px solid var(--border);color:var(--muted);cursor:default">'+s+'</span>';
+  }).join('');
+
+  var totalReq = symbols.length * months.length;
+  var done = 0;
+  var batch = [];
+
+  for(var si=0; si<symbols.length; si++){
+    if(_stopFlag) break;
+    var sym = symbols[si];
+
+    var spBadge = document.getElementById('sp-'+sym);
+    if(spBadge){ spBadge.style.borderColor='var(--amber)'; spBadge.style.color='var(--amber)'; }
+
+    for(var mi=0; mi<months.length; mi++){
+      if(_stopFlag) break;
+      var month = months[mi];
+      done++;
+
+      /* Dedup check */
+      var key = sym+'|'+month.key;
+      if(_existingKeys.has(key)){
+        /* Update progress tapi skip fetch */
+        var pct = Math.round(done/totalReq*100);
+        document.getElementById('prog-fill').style.width = pct+'%';
+        document.getElementById('prog-pct').textContent  = pct+'%';
+        document.getElementById('prog-label').textContent = '[SKIP] '+sym+' '+month.key;
+        continue;
+      }
+
+      /* Progress */
+      var pct = Math.round(done/totalReq*100);
+      document.getElementById('prog-fill').style.width = pct+'%';
+      document.getElementById('prog-pct').textContent  = pct+'%';
+      document.getElementById('prog-label').textContent = sym+' '+month.key;
+      document.getElementById('prog-detail').textContent = done+'/'+totalReq;
+
+      /* ETA */
+      var elapsed = (Date.now()-_startTime)/1000;
+      var eta = done > 0 ? Math.round((totalReq-done)*elapsed/done) : 0;
+      document.getElementById('prog-eta').textContent = 'ETA: '+_fmtTime(eta);
+
+      try {
+        var url = 'https://exodus.stockbit.com/marketdetectors/'+sym+
+          '?transaction_type=TRANSACTION_TYPE_NET'+
+          '&market_board=MARKET_BOARD_REGULER'+
+          '&investor_type=INVESTOR_TYPE_ALL'+
+          '&limit=25'+
+          '&from='+month.from+'&to='+month.to;
+
+        var resp = await fetch(url, { headers:{'Authorization':'Bearer '+token} });
+
+        if(resp.status===429){
+          _log('429 rate limit ('+sym+' '+month.key+') tunggu 5s...', 'warn');
+          await _sleep(5000); mi--; done--; continue;
+        }
+        if(resp.status===401){
+          _log('Token expired! Stop.', 'err');
+          _stopFlag=true; break;
+        }
+
+        if(resp.ok){
+          var json = await resp.json();
+          var bd = json.data?.bandar_detector;
+          var bs = json.data?.broker_summary;
+          var buys  = bs?.brokers_buy  || [];
+          var sells = bs?.brokers_sell || [];
+
+          /* Hanya simpan jika ada data */
+          if(buys.length || sells.length){
+            batch.push({
+              sym:    sym,
+              month:  month.key,
+              from:   month.from,
+              to:     month.to,
+              buys:   buys.map(function(b){return{
+                code:b.netbs_broker_code, type:b.type,
+                val:parseFloat(b.bval||0), lot:parseFloat(b.blot||0),
+                avg:parseFloat(b.netbs_buy_avg_price||0), freq:parseInt(b.freq||0)
+              };}),
+              sells:  sells.map(function(s){return{
+                code:s.netbs_broker_code, type:s.type,
+                val:parseFloat(s.bval||0), lot:parseFloat(s.blot||0),
+                avg:parseFloat(s.netbs_buy_avg_price||0), freq:parseInt(s.freq||0)
+              };}),
+              bandar: bd ? {
+                accdist:    bd.broker_accdist,
+                amount:     bd.avg?.amount,
+                percent:    bd.avg?.percent,
+                total_buyer:bd.total_buyer,
+                total_seller:bd.total_seller,
+                top1_accdist: bd.top1?.accdist,
+                top3_accdist: bd.top3?.accdist,
+                top5_accdist: bd.top5?.accdist,
+              } : null,
+            });
+            _existingKeys.add(key);
+          }
+        }
+      } catch(e) { /* skip */ }
+
+      /* Flush batch */
+      if(batch.length >= batchSz){
+        await _flushBatch(batch, gsUrl);
+        batch = [];
+      }
+
+      await _sleep(delay);
+    }
+
+    /* Symbol selesai */
+    if(spBadge){ spBadge.style.borderColor='var(--green)'; spBadge.style.color='var(--green)'; }
+    document.getElementById('stat-syms').textContent = (si+1)+'/'+symbols.length;
+    _saveDB();
+  }
+
+  /* Flush sisa */
+  if(batch.length > 0) await _flushBatch(batch, gsUrl);
+
+  _running = false;
+  _stopFlag = false;
+  document.getElementById('run-btn').style.display = 'block';
+  document.getElementById('stop-btn').style.display = 'none';
+  document.getElementById('prog-wrap').style.display = 'none';
+
+  var totalTime = Math.round((Date.now()-_startTime)/1000);
+  _log('✓ Selesai! Waktu: '+_fmtTime(totalTime)+' · Session rows: '+_sessionRows, 'ok');
+  _checkSheets();
+}
+
+async function _flushBatch(batch, gsUrl){
+  try {
+    var resp = await fetch(gsUrl, {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ action:'md_save_batch', rows:batch })
+    });
+    var text = await resp.text();
+    var json; try{ json=JSON.parse(text); }catch(e){ _log('Parse err: '+text.slice(0,80),'err'); return; }
+    if(json.ok){
+      _sessionRows += json.saved||0;
+      document.getElementById('stat-session').textContent = _sessionRows;
+      _log('Batch: +'+(json.saved||0)+' rows (skip:'+(json.skipped||0)+')', 'ok');
+    } else {
+      _log('Batch err: '+(json.error||'?'), 'err');
+    }
+  } catch(e){ _log('Flush err: '+e.message,'err'); }
+}
+
+async function _checkSheets(){
+  var gsUrl = _getGsUrl();
+  try {
+    var resp = await fetch(gsUrl+'?action=md_count');
+    var json = await resp.json();
+    document.getElementById('stat-rows').textContent = (json.rows||0).toLocaleString('id-ID');
+    document.getElementById('gs-status').textContent = '✓ Sheets: '+(json.rows||0)+' rows';
+    _log('Sheets: '+(json.rows||0)+' rows', 'ok');
+  } catch(e) {
+    document.getElementById('gs-status').textContent = '✗ '+e.message;
+  }
+}
+
+async function _clearSheets(){
+  if(!confirm('Hapus semua market detector data?')) return;
+  try {
+    var resp = await fetch(_getGsUrl(), {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ action:'md_clear' })
+    });
+    var json = await resp.json();
+    _log(json.ok ? 'Cleared' : 'Error: '+json.error, json.ok?'ok':'err');
+    _checkSheets();
+  } catch(e){ _log('Error: '+e.message,'err'); }
+}
+
+function _stop(){ _stopFlag=true; _log('Stop requested...','warn'); }
+
+function _saveDB(){
+  /* Simpan existing keys ke localStorage untuk resume */
+  try{ localStorage.setItem('md_keys', JSON.stringify([..._existingKeys])); }catch(e){}
+}
+
+function _fmtTime(secs){
+  if(secs<60) return secs+'s';
+  if(secs<3600) return Math.floor(secs/60)+'m '+Math.round(secs%60)+'s';
+  return Math.floor(secs/3600)+'h '+Math.floor((secs%3600)/60)+'m';
+}
+
+function _log(msg, type){
+  var colors = {ok:'var(--green)',err:'var(--red)',warn:'var(--amber)'};
+  var time = new Date().toLocaleTimeString('id-ID');
+  ['main-log','prog-log'].forEach(function(id){
+    var el = document.getElementById(id);
+    if(!el) return;
+    var div = document.createElement('div');
+    div.style.color = colors[type]||'var(--muted)';
+    div.textContent = '['+time+'] '+msg;
+    el.appendChild(div);
+    el.scrollTop = el.scrollHeight;
+  });
+}
+</script>
+</body>
+</html>
