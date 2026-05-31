@@ -722,24 +722,49 @@ function _buildIndicator(uid){
     ind.series.push(hist);
   }
   else if(ind.id==='broker'){
-    var hist=chart.addHistogramSeries({priceScaleId:uid,priceLineVisible:false,lastValueVisible:true,
-      title:'Broker '+(p.code||'?')});
     var cache=BROKER_CACHE[STATE.sym];
-    var data=[];
+    var metric=p.metric==='lot'?'lot':'val';
+    /* Kumpulkan buy & sell broker p.code per hari.
+       sell.val SUDAH negatif; untuk "buy" pakai nilai positif, "sell" pakai nilai (negatif) apa adanya. */
+    var buyArr=[], sellArr=[], netArr=[];
     if(p.code && cache && cache.daily && cache.daily.length){
-      /* net broker p.code per hari: buy val − sell val (atau lot) */
-      var metric=p.metric==='lot'?'lot':'val';
       cache.daily.forEach(function(row){
-        var net=0;
-        (row.buys||[]).forEach(function(b){ if(b.code===p.code) net+=(+b[metric]||0); });
-        (row.sells||[]).forEach(function(s){ if(s.code===p.code) net-=(+s[metric]||0); });
-        if(net!==0) data.push({time:row.date,value:net,
-          color:net>=0?'rgba(38,166,154,0.6)':'rgba(242,54,69,0.6)'});
+        var bv=0, sv=0;
+        (row.buys||[]).forEach(function(b){ if(b.code===p.code) bv+=(+b[metric]||0); });
+        (row.sells||[]).forEach(function(s){ if(s.code===p.code) sv+=(+s[metric]||0); }); /* sv negatif */
+        if(bv!==0) buyArr.push({time:row.date,value:bv});
+        if(sv!==0) sellArr.push({time:row.date,value:sv});
+        var net=bv+sv;
+        if(net!==0) netArr.push({time:row.date,value:net});
       });
     }
-    hist.setData(data);
-    chart.priceScale(uid).applyOptions({scaleMargins:{top:0.75,bottom:0.05}});
-    ind.series.push(hist);
+    if(p.shape==='line'){
+      /* Garis kumulatif net, overlay di chart utama (akumulasi/distribusi) */
+      var line=chart.addLineSeries({priceScaleId:uid,lineWidth:2,color:'#2962ff',
+        priceLineVisible:false,lastValueVisible:true,title:'Broker '+p.code+' (kum)'});
+      var cum=0, ld=netArr.map(function(d){cum+=d.value;return{time:d.time,value:cum};});
+      line.setData(ld);
+      chart.priceScale(uid).applyOptions({scaleMargins:{top:0.1,bottom:0.7}});
+      ind.series.push(line);
+    } else if(p.net){
+      /* net:true → 1 bar selisih (MACD-style): hijau di atas, merah di bawah */
+      var hist=chart.addHistogramSeries({priceScaleId:uid,priceLineVisible:false,lastValueVisible:true,
+        title:'Broker '+p.code+' net'});
+      hist.setData(netArr.map(function(d){return{time:d.time,value:d.value,
+        color:d.value>=0?'rgba(38,166,154,0.7)':'rgba(242,54,69,0.7)'};}));
+      chart.priceScale(uid).applyOptions({scaleMargins:{top:0.75,bottom:0.05}});
+      ind.series.push(hist);
+    } else {
+      /* net:false → dua bar: hijau buy ke atas + merah sell ke bawah */
+      var hb=chart.addHistogramSeries({priceScaleId:uid,priceLineVisible:false,lastValueVisible:false,
+        title:'Broker '+p.code+' buy'});
+      hb.setData(buyArr.map(function(d){return{time:d.time,value:d.value,color:'rgba(38,166,154,0.7)'};}));
+      var hs=chart.addHistogramSeries({priceScaleId:uid,priceLineVisible:false,lastValueVisible:false,
+        title:'Broker '+p.code+' sell'});
+      hs.setData(sellArr.map(function(d){return{time:d.time,value:d.value,color:'rgba(242,54,69,0.7)'};}));
+      chart.priceScale(uid).applyOptions({scaleMargins:{top:0.6,bottom:0.05}});
+      ind.series.push(hb); ind.series.push(hs);
+    }
   }
 }
 
@@ -902,7 +927,25 @@ function _openSettings(uid){
   document.getElementById('set-title').textContent=ind.name;
   var p=ind.params;
   var html='';
-  /* Field per parameter */
+  if(ind.id==='broker'){
+    html+='<div style="margin-bottom:14px"><label style="display:block;font-size:11px;color:var(--sub);margin-bottom:5px">Kode Broker</label>'+
+      '<input type="text" id="set-code" value="'+(p.code||'')+'" style="width:100%;background:var(--bg);border:1px solid var(--border2);color:var(--text);padding:8px 10px;border-radius:5px;text-transform:uppercase;outline:none"></div>';
+    html+='<div style="margin-bottom:14px"><label style="display:block;font-size:11px;color:var(--sub);margin-bottom:5px">Bentuk</label>'+
+      '<select id="set-shape" style="width:100%;background:var(--bg);border:1px solid var(--border2);color:var(--text);padding:8px 10px;border-radius:5px;outline:none">'+
+      '<option value="bar"'+(p.shape!=='line'?' selected':'')+'>Bar (pane, gaya MACD)</option>'+
+      '<option value="line"'+(p.shape==='line'?' selected':'')+'>Garis kumulatif (overlay)</option></select></div>';
+    html+='<div style="margin-bottom:14px"><label style="display:block;font-size:11px;color:var(--sub);margin-bottom:5px">Ukuran</label>'+
+      '<select id="set-metric" style="width:100%;background:var(--bg);border:1px solid var(--border2);color:var(--text);padding:8px 10px;border-radius:5px;outline:none">'+
+      '<option value="val"'+(p.metric!=='lot'?' selected':'')+'>Net Value (Rp)</option>'+
+      '<option value="lot"'+(p.metric==='lot'?' selected':'')+'>Net Lot</option></select></div>';
+    html+='<div style="margin-bottom:14px;display:flex;align-items:center;gap:8px">'+
+      '<input type="checkbox" id="set-net"'+(p.net?' checked':'')+' style="width:16px;height:16px">'+
+      '<label for="set-net" style="font-size:12px;color:var(--text)">Net (1 bar selisih). Matikan = 2 bar buy &amp; sell terpisah.</label></div>';
+    html+='<button onclick="_applyBrokerSettings()" style="width:100%;margin-top:8px;padding:10px;background:var(--blue);border:none;color:#fff;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer">Terapkan</button>';
+    document.getElementById('set-body').innerHTML=html;
+    document.getElementById('set-modal').classList.add('show');
+    return;
+  }
   Object.keys(p).forEach(function(key){
     var labels={period:'Periode',mult:'Multiplier',fast:'Fast',slow:'Slow',signal:'Signal',k:'%K',d:'%D',step:'Step',max:'Max'};
     html+='<div style="margin-bottom:14px">'+
@@ -932,6 +975,21 @@ function _applySettings(){
   _closeSettings();
 }
 function _closeSettings(){ document.getElementById('set-modal').classList.remove('show'); }
+
+function _applyBrokerSettings(){
+  var ind=ACTIVE_IND[_setUID];
+  if(!ind)return;
+  ind.params.code=(document.getElementById('set-code').value||'').trim().toUpperCase();
+  ind.params.shape=document.getElementById('set-shape').value;
+  ind.params.metric=document.getElementById('set-metric').value;
+  ind.params.net=document.getElementById('set-net').checked;
+  ind.name='Broker '+ind.params.code;
+  ind.series.forEach(function(s){ try{ chart.removeSeries(s); }catch(e){} });
+  ind.series=[];
+  _buildIndicator(_setUID);
+  _renderActiveList();
+  _closeSettings();
+}
 
 function _fullscreen(){ if(!document.fullscreenElement)document.documentElement.requestFullscreen(); else document.exitFullscreen(); }
 
@@ -1014,7 +1072,9 @@ function _clearDrawings(){
 
 /* ═══════════════ BROKER ANALYSIS MODULE ═══════════════ */
 /* Modular & portable — siap dipindah ke IHSG Lab sbg tab.
-   Sumber: marketdetector_activity (bulanan, Top10) + broker_daily (harian, pane). */
+   Sumber: marketdetector_activity (bulanan, Top10) + broker_daily (harian, pane).
+   CATATAN field Stockbit: buy pakai bval/blot/netbs_buy_avg_price (positif),
+   sell pakai sval/slot/netbs_sell_avg_price (SUDAH negatif). */
 
 function _fmtRp(v){
   var a=Math.abs(v);
@@ -1025,21 +1085,27 @@ function _fmtRp(v){
   return String(Math.round(v));
 }
 
-/* Agregat Top10 buyer/seller dari data BULANAN, 3 bulan terakhir */
-function _brokerTop10(monthly){
-  if(!monthly||!monthly.length)return{buyers:[],sellers:[],months:[]};
+/* Berapa hari terakhir yang dipakai untuk agregat Top10 & default fetch */
+var BROKER_TOP_DAYS=90;   /* default rentang Top10 (hari) */
+var BROKER_FETCH_DAYS=130;/* default rentang fetch harian (hari) */
+
+/* Agregat Top buyer/seller dari data BULANAN, dibatasi N hari terakhir.
+   Karena data bulanan, N hari dikonversi ke jumlah bulan (ceil N/30). */
+function _brokerTop(monthly, days){
+  if(!monthly||!monthly.length)return{buyers:[],sellers:[],months:[],allCodes:[]};
+  var nMonths=Math.max(1,Math.ceil((days||90)/30));
   var months=monthly.map(function(r){return r.month;}).sort();
-  var last3=months.slice(-3);
-  var net={}; /* code -> net val (buy positif, sell negatif) */
+  var pick=months.slice(-nMonths);
+  var net={}; /* code -> net val. sell.val SUDAH negatif → tinggal ditambah. */
   monthly.forEach(function(r){
-    if(last3.indexOf(r.month)<0)return;
+    if(pick.indexOf(r.month)<0)return;
     (r.buys||[]).forEach(function(b){ net[b.code]=(net[b.code]||0)+(+b.val||0); });
-    (r.sells||[]).forEach(function(s){ net[s.code]=(net[s.code]||0)-(+s.val||0); });
+    (r.sells||[]).forEach(function(s){ net[s.code]=(net[s.code]||0)+(+s.val||0); });
   });
   var arr=Object.keys(net).map(function(k){return{code:k,net:net[k]};});
   var buyers =arr.filter(function(x){return x.net>0;}).sort(function(a,b){return b.net-a.net;}).slice(0,10);
   var sellers=arr.filter(function(x){return x.net<0;}).sort(function(a,b){return a.net-b.net;}).slice(0,10);
-  return{buyers:buyers,sellers:sellers,months:last3,allCodes:Object.keys(net).sort()};
+  return{buyers:buyers,sellers:sellers,months:pick,allCodes:Object.keys(net).sort()};
 }
 
 /* Panel utama broker */
@@ -1080,6 +1146,13 @@ function _loadBrokerData(sym){
     });
 }
 
+/* Dipanggil saat user ubah input rentang Top10 */
+function _brokerTopDaysChanged(){
+  var v=parseInt(document.getElementById('bm-topdays').value);
+  if(v>0)BROKER_TOP_DAYS=v;
+  _renderBrokerPanel(STATE.sym);
+}
+
 function _renderBrokerPanel(sym){
   var cache=BROKER_CACHE[sym]||{};
   var monthly=cache.monthly||[];
@@ -1089,10 +1162,15 @@ function _renderBrokerPanel(sym){
       'Gunakan fitur fetch di IHSG Lab untuk mengumpulkan data broker emiten ini terlebih dahulu.</div>';
     return;
   }
-  var t=_brokerTop10(monthly);
+  var t=_brokerTop(monthly, BROKER_TOP_DAYS);
   var hasDaily=cache.daily && cache.daily.length;
   var html='';
-  html+='<div style="font-size:11px;color:#868993;margin-bottom:10px">Top broker · 3 bulan terakhir ('+t.months.join(', ')+') · net value</div>';
+  /* Kontrol rentang Top10 */
+  html+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;font-size:11px;color:#868993">'+
+    '<span>Rentang Top broker:</span>'+
+    '<input id="bm-topdays" type="number" min="1" value="'+BROKER_TOP_DAYS+'" '+
+    'onchange="_brokerTopDaysChanged()" style="width:64px;padding:4px 7px;background:#1c1f26;border:1px solid #363a45;border-radius:4px;color:#d1d4dc;font-size:11px"> hari'+
+    '<span style="color:#5d606b">(≈'+t.months.length+' bln: '+t.months.join(', ')+')</span></div>';
   html+='<div style="display:flex;gap:14px">';
   /* Buyers */
   html+='<div style="flex:1"><div style="font-size:12px;font-weight:600;color:#26a69a;margin-bottom:6px">🟢 Top 10 Net Buyer</div>';
@@ -1116,10 +1194,17 @@ function _renderBrokerPanel(sym){
   html+='</div></div>';
 
   /* Bagian pane harian */
-  html+='<div style="border-top:1px solid var(--border,#363a45);margin-top:14px;padding-top:12px">';
+  html+='<div style="border-top:1px solid var(--border2,#363a45);margin-top:14px;padding-top:12px">';
   html+='<div style="font-size:12px;font-weight:600;color:#d1d4dc;margin-bottom:6px">Pergerakan Broker (pane harian)</div>';
+  /* Kontrol rentang fetch */
+  html+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:11px;color:#868993">'+
+    '<span>Rentang fetch:</span>'+
+    '<input id="bm-fetchdays" type="number" min="1" value="'+BROKER_FETCH_DAYS+'" '+
+    'style="width:64px;padding:4px 7px;background:#1c1f26;border:1px solid #363a45;border-radius:4px;color:#d1d4dc;font-size:11px"> hari terakhir'+
+    '<button onclick="_fetchBrokerDaily(\''+sym+'\')" class="bm-fetch-btn" style="padding:5px 10px;font-size:11px">⬇ Fetch</button></div>';
+  html+='<div id="bm-fetch-status" style="font-size:11px;color:#868993;margin-bottom:8px"></div>';
   if(hasDaily){
-    html+='<div style="font-size:11px;color:#868993;margin-bottom:8px">Data harian: '+cache.daily.length+' hari tersedia. Klik broker mana pun di atas untuk menampilkan net hariannya sebagai pane.</div>';
+    html+='<div style="font-size:11px;color:#868993;margin-bottom:8px">Data harian: '+cache.daily.length+' hari. Klik broker mana pun untuk menampilkan pane net hariannya.</div>';
     html+='<div style="margin-bottom:8px"><input id="bm-search" placeholder="cari kode broker..." oninput="_filterBrokerList()" '+
       'style="width:100%;padding:7px 10px;background:#1c1f26;border:1px solid #363a45;border-radius:5px;color:#d1d4dc;font-size:12px"></div>';
     html+='<div id="bm-list" style="display:flex;flex-wrap:wrap;gap:6px">';
@@ -1128,9 +1213,7 @@ function _renderBrokerPanel(sym){
     });
     html+='</div>';
   }else{
-    html+='<div style="font-size:11px;color:#868993;margin-bottom:8px">Data harian belum ada untuk '+sym+'. Fetch dulu dari Stockbit (per hari) untuk menampilkan pane pergerakan broker.</div>';
-    html+='<button onclick="_fetchBrokerDaily(\''+sym+'\')" class="bm-fetch-btn">⬇ Fetch Data Broker Harian</button>';
-    html+='<div id="bm-fetch-status" style="font-size:11px;color:#868993;margin-top:8px"></div>';
+    html+='<div style="font-size:11px;color:#868993">Data harian belum ada untuk '+sym+'. Atur rentang lalu klik Fetch.</div>';
   }
   html+='</div>';
   body.innerHTML=html;
@@ -1142,19 +1225,19 @@ function _filterBrokerList(){
   chips.forEach(function(c){ c.style.display=c.getAttribute('data-code').indexOf(q)>=0?'':'none'; });
 }
 
-/* Pilih broker → buat/refresh pane */
+/* Pilih broker → buat/refresh pane (mode & toggle default) */
 function _pickBroker(code){
   var sym=STATE.sym, cache=BROKER_CACHE[sym]||{};
   if(!cache.daily||!cache.daily.length){
     var st=document.getElementById('bm-fetch-status');
-    if(st)st.textContent='Data harian belum ada — fetch dulu untuk menampilkan pane.';
-    else alert('Data harian broker belum tersedia. Fetch dulu data harian untuk '+sym+'.');
+    if(st)st.textContent='Data harian belum ada — atur rentang lalu Fetch dulu.';
+    else alert('Data harian broker belum tersedia. Fetch dulu untuk '+sym+'.');
     return;
   }
-  /* Hapus pane broker lama, buat baru dgn code terpilih */
   Object.keys(ACTIVE_IND).forEach(function(uid){ if(ACTIVE_IND[uid].id==='broker')_removeIndicator(uid); });
   var uid='broker_'+(++IND_COUNTER);
-  ACTIVE_IND[uid]={id:'broker',name:'Broker '+code,overlay:false,series:[],params:{code:code,metric:'val'}};
+  ACTIVE_IND[uid]={id:'broker',name:'Broker '+code,overlay:false,series:[],
+    params:{code:code,metric:'val',shape:'bar',net:true}}; /* net:true = 1 bar selisih (MACD-style) */
   _buildIndicator(uid);
   _renderActiveList();
   _closeBrokerPanel();
@@ -1163,40 +1246,54 @@ function _pickBroker(code){
 /* Fetch data broker harian dari Stockbit (marketdetectors, from=to per hari) */
 async function _fetchBrokerDaily(sym){
   var token=_getToken();
-  if(!token){ document.getElementById('bm-fetch-status').textContent='Masukkan token dulu.'; return; }
   var st=document.getElementById('bm-fetch-status');
-  /* Rentang: ikuti candle yang tampil (hindari fetch ribuan hari) — pakai 6 bulan terakhir hari bursa dari candle */
+  if(!token){ if(st)st.textContent='Masukkan token dulu.'; return; }
+  var days=parseInt((document.getElementById('bm-fetchdays')||{}).value)||BROKER_FETCH_DAYS;
+  BROKER_FETCH_DAYS=days;
   var dates=STATE.candles.map(function(c){return c.time;}).filter(function(t){return typeof t==='string';});
-  if(!dates.length){ st.textContent='Pane broker harian butuh timeframe Daily/Weekly. Ganti ke 1 hari dulu.'; return; }
-  var recent=dates.slice(-130); /* ~6 bulan hari bursa */
-  var rows=[], done=0;
+  if(!dates.length){ if(st)st.textContent='Pane broker harian butuh timeframe Daily/Weekly. Ganti ke 1 hari dulu.'; return; }
+  var recent=dates.slice(-days);
+  var existing={};
+  (BROKER_CACHE[sym]&&BROKER_CACHE[sym].daily||[]).forEach(function(r){existing[r.date]=1;});
+  var rows=(BROKER_CACHE[sym]&&BROKER_CACHE[sym].daily||[]).slice();
+  var newRows=[], done=0;
   for(var i=0;i<recent.length;i++){
     var dt=recent[i];
-    st.textContent='Fetch '+sym+' '+dt+' ('+(i+1)+'/'+recent.length+')...';
+    if(existing[dt])continue; /* skip yang sudah ada */
+    if(st)st.textContent='Fetch '+sym+' '+dt+' ('+(i+1)+'/'+recent.length+')...';
     try{
       var url='https://exodus.stockbit.com/marketdetectors/'+sym+
         '?transaction_type=TRANSACTION_TYPE_NET&market_board=MARKET_BOARD_REGULER&investor_type=INVESTOR_TYPE_ALL&limit=25&from='+dt+'&to='+dt;
       var r=await fetch(url,{headers:{'Authorization':'Bearer '+token}});
-      if(r.status===401){ st.textContent='Token expired.'; break; }
+      if(r.status===401){ if(st)st.textContent='Token expired.'; break; }
       if(r.status===429){ await new Promise(function(x){setTimeout(x,5000);}); i--; continue; }
       if(!r.ok){ continue; }
       var j=await r.json();
       var bs=(j.data&&j.data.broker_summary)||{};
-      var buys=(bs.brokers_buy||[]).map(function(b){return{code:b.netbs_broker_code,type:b.type,val:parseFloat(b.bval||0),lot:parseFloat(b.blot||0),avg:parseFloat(b.netbs_buy_avg_price||0),freq:parseInt(b.freq||0)};});
-      var sells=(bs.brokers_sell||[]).map(function(s){return{code:s.netbs_broker_code,type:s.type,val:parseFloat(s.bval||0),lot:parseFloat(s.blot||0),avg:parseFloat(s.netbs_buy_avg_price||0),freq:parseInt(s.freq||0)};});
-      if(buys.length||sells.length){ rows.push({date:dt,buys:buys,sells:sells,bandar:(j.data&&j.data.bandar_detector)||{}}); done++; }
+      /* BUY: bval/blot/netbs_buy_avg_price (positif). SELL: sval/slot/netbs_sell_avg_price (negatif). */
+      var buys=(bs.brokers_buy||[]).map(function(b){return{
+        code:b.netbs_broker_code, type:b.type,
+        val:parseFloat(b.bval||0), lot:parseFloat(b.blot||0),
+        avg:parseFloat(b.netbs_buy_avg_price||0), freq:parseInt(b.freq||0)};});
+      var sells=(bs.brokers_sell||[]).map(function(s){return{
+        code:s.netbs_broker_code, type:s.type,
+        val:parseFloat(s.sval||0), lot:parseFloat(s.slot||0),
+        avg:parseFloat(s.netbs_sell_avg_price||0), freq:parseInt(s.freq||0)};});
+      if(buys.length||sells.length){ newRows.push({date:dt,buys:buys,sells:sells,bandar:(j.data&&j.data.bandar_detector)||{}}); done++; }
     }catch(e){}
     await new Promise(function(x){setTimeout(x,250);});
   }
-  /* Simpan ke cache + Sheets */
+  rows=rows.concat(newRows).sort(function(a,b){return a.date<b.date?-1:1;});
   BROKER_CACHE[sym]=BROKER_CACHE[sym]||{};
   BROKER_CACHE[sym].daily=rows;
-  st.textContent='Selesai: '+done+' hari. Menyimpan ke database...';
-  try{
-    await fetch(APPS_URL,{method:'POST',redirect:'follow',
-      body:JSON.stringify({action:'bka_save_batch',sym:sym,rows:rows})});
-    st.textContent='Selesai: '+done+' hari tersimpan. Membuka daftar broker...';
-  }catch(e){ st.textContent='Data di-cache ('+done+' hari) tapi gagal simpan ke Sheets: '+e.message; }
+  if(st)st.textContent='Selesai: '+done+' hari baru. Menyimpan ke database...';
+  if(newRows.length){
+    try{
+      await fetch(APPS_URL,{method:'POST',redirect:'follow',
+        body:JSON.stringify({action:'bka_save_batch',sym:sym,rows:newRows})});
+      if(st)st.textContent='Selesai: '+done+' hari baru tersimpan. Total '+rows.length+' hari.';
+    }catch(e){ if(st)st.textContent='Data di-cache ('+done+' hari) tapi gagal simpan ke Sheets: '+e.message; }
+  }
   _renderBrokerPanel(sym);
 }
 
