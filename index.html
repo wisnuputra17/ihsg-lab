@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IHSG SUITE</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&family=Rajdhani:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg0:#03060d; --bg1:#070d1a;
+    --neon:#00ff9d; --neon2:#00d4ff; --neon3:#ff2e88;
+    --amber:#ffb800; --purple:#a855f7;
+    --text:#e8f0ff; --sub:#7891b5; --muted:#3a4d6b;
+    --grid:rgba(0,212,255,0.06);
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{height:100%;overflow:hidden;background:var(--bg0);color:var(--text);font-family:'Rajdhani',sans-serif}
+  #bg-canvas{position:fixed;inset:0;z-index:0;display:block}
+  .grid-overlay{position:fixed;inset:0;z-index:1;pointer-events:none;
+    background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);
+    background-size:50px 50px;
+    -webkit-mask-image:radial-gradient(ellipse 80% 70% at 50% 50%,#000 30%,transparent 75%);
+    mask-image:radial-gradient(ellipse 80% 70% at 50% 50%,#000 30%,transparent 75%);
+    animation:gridpan 22s linear infinite}
+  @keyframes gridpan{from{background-position:0 0,0 0}to{background-position:50px 50px,50px 50px}}
+  .scanlines{position:fixed;inset:0;z-index:60;pointer-events:none;opacity:.4;
+    background:repeating-linear-gradient(0deg,transparent 0,transparent 2px,rgba(0,0,0,.18) 3px,transparent 4px)}
+  .vignette{position:fixed;inset:0;z-index:55;pointer-events:none;box-shadow:inset 0 0 200px 60px rgba(0,0,0,.85)}
+  .wrap{position:relative;z-index:10;height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;text-align:center}
+  .hud-top{position:fixed;top:0;left:0;right:0;z-index:30;display:flex;justify-content:space-between;align-items:center;padding:16px 28px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--sub);letter-spacing:1px}
+  .hud-top .live{display:flex;align-items:center;gap:7px;color:var(--neon)}
+  .live-dot{width:8px;height:8px;border-radius:50%;background:var(--neon);box-shadow:0 0 10px var(--neon);animation:blink 1.5s ease-in-out infinite}
+  @keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+  .ticker-mini{display:flex;gap:18px}
+  .ticker-mini span b{color:var(--neon)}
+  .logo-badge{font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:5px;color:var(--neon2);margin-bottom:18px;opacity:0;animation:fadeUp .8s .2s forwards;text-transform:uppercase}
+  .title{font-family:'Orbitron',sans-serif;font-weight:900;line-height:.92;font-size:clamp(48px,11vw,150px);letter-spacing:2px;position:relative;opacity:0;animation:fadeUp .9s .35s forwards}
+  .title .ihsg{background:linear-gradient(180deg,#fff 0%,var(--neon) 55%,var(--neon2) 100%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;filter:drop-shadow(0 0 28px rgba(0,255,157,.45))}
+  .title .suite{display:block;font-size:.42em;letter-spacing:18px;margin-top:6px;color:var(--text);-webkit-text-fill-color:var(--text);text-shadow:0 0 20px rgba(0,212,255,.6)}
+  .title::before{content:'IHSG';position:absolute;left:50%;top:0;transform:translateX(-50%);color:var(--neon3);-webkit-text-fill-color:var(--neon3);opacity:0;animation:glitch 4.5s infinite;z-index:-1}
+  @keyframes glitch{0%,92%,100%{opacity:0;transform:translateX(-50%)}93%{opacity:.7;transform:translate(-52%,2px)}95%{opacity:.5;transform:translate(-48%,-2px)}97%{opacity:.6;transform:translate(-50%,1px)}}
+  .tagline{font-size:clamp(13px,1.6vw,18px);color:var(--sub);letter-spacing:3px;margin-top:20px;font-weight:300;text-transform:uppercase;opacity:0;animation:fadeUp .9s .5s forwards}
+  .tagline b{color:var(--neon2);font-weight:600}
+  .cards{display:flex;gap:26px;margin-top:54px;flex-wrap:wrap;justify-content:center;opacity:0;animation:fadeUp 1s .7s forwards}
+  .card{position:relative;width:300px;padding:30px 26px;cursor:pointer;background:linear-gradient(160deg,rgba(10,20,38,.85),rgba(6,12,26,.92));border:1px solid rgba(0,212,255,.18);border-radius:4px;clip-path:polygon(0 0,100% 0,100% calc(100% - 18px),calc(100% - 18px) 100%,0 100%);transition:transform .35s cubic-bezier(.2,.8,.2,1),border-color .35s,box-shadow .35s;overflow:hidden;text-align:left;text-decoration:none}
+  .card::before{content:'';position:absolute;inset:0;background:radial-gradient(circle at var(--mx,50%) var(--my,0%),rgba(0,255,157,.12),transparent 60%);opacity:0;transition:opacity .35s}
+  .card:hover{transform:translateY(-10px) scale(1.02);border-color:var(--neon);box-shadow:0 0 0 1px var(--neon),0 18px 50px -10px rgba(0,255,157,.35),0 0 60px -15px var(--neon)}
+  .card:hover::before{opacity:1}
+  .card.hub:hover{border-color:var(--neon2);box-shadow:0 0 0 1px var(--neon2),0 18px 50px -10px rgba(0,212,255,.4),0 0 60px -15px var(--neon2)}
+  .card-tag{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:2px;color:var(--muted);margin-bottom:14px}
+  .card-icon{font-size:38px;margin-bottom:14px;display:block;filter:drop-shadow(0 0 12px rgba(0,255,157,.5))}
+  .card.hub .card-icon{filter:drop-shadow(0 0 12px rgba(0,212,255,.5))}
+  .card-name{font-family:'Orbitron',sans-serif;font-weight:700;font-size:24px;color:var(--text);margin-bottom:8px;letter-spacing:1px}
+  .card.lab .card-name{color:var(--neon)}
+  .card.hub .card-name{color:var(--neon2)}
+  .card-desc{font-size:14px;color:var(--sub);line-height:1.5;font-weight:300;min-height:60px}
+  .card-feats{display:flex;flex-wrap:wrap;gap:6px;margin-top:16px}
+  .feat{font-family:'JetBrains Mono',monospace;font-size:9px;padding:3px 8px;border-radius:3px;background:rgba(0,212,255,.06);border:1px solid rgba(0,212,255,.15);color:var(--sub);letter-spacing:.5px}
+  .card-enter{margin-top:20px;display:flex;align-items:center;gap:8px;font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:2px;color:var(--neon)}
+  .card.hub .card-enter{color:var(--neon2)}
+  .card-enter .arrow{transition:transform .3s}
+  .card:hover .card-enter .arrow{transform:translateX(6px)}
+  .card-num{position:absolute;top:18px;right:20px;font-family:'Orbitron',sans-serif;font-size:48px;font-weight:900;color:rgba(255,255,255,.03);line-height:1}
+  .hud-bottom{position:fixed;bottom:0;left:0;right:0;z-index:30;display:flex;justify-content:space-between;padding:14px 28px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:1px;opacity:0;animation:fadeUp 1s 1s forwards}
+  .hud-bottom .corner{display:flex;gap:5px;align-items:center}
+  @keyframes fadeUp{from{opacity:0;transform:translateY(28px)}to{opacity:1;transform:translateY(0)}}
+  .bracket{position:fixed;width:40px;height:40px;z-index:40;border-color:var(--neon2);opacity:.5}
+  .bracket.tl{top:20px;left:20px;border-top:2px solid;border-left:2px solid}
+  .bracket.tr{top:20px;right:20px;border-top:2px solid;border-right:2px solid}
+  .bracket.bl{bottom:20px;left:20px;border-bottom:2px solid;border-left:2px solid}
+  .bracket.br{bottom:20px;right:20px;border-bottom:2px solid;border-right:2px solid}
+  @media(max-width:640px){.hud-top .ticker-mini{display:none}.cards{margin-top:36px}.card{width:88vw;max-width:340px}}
+</style>
+</head>
+<body>
+<canvas id="bg-canvas"></canvas>
+<div class="grid-overlay"></div>
+<div class="bracket tl"></div><div class="bracket tr"></div>
+<div class="bracket bl"></div><div class="bracket br"></div>
+
+<div class="hud-top">
+  <div class="live"><span class="live-dot"></span>SYSTEM ONLINE</div>
+  <div class="ticker-mini" id="ticker">
+    <span>IHSG <b>—</b></span><span>VOL <b>—</b></span><span id="clock">--:--:--</span>
+  </div>
+</div>
+
+<div class="wrap">
+  <div class="logo-badge">// INDONESIA STOCK INTELLIGENCE</div>
+  <h1 class="title"><span class="ihsg">IHSG</span><span class="suite">SUITE</span></h1>
+  <p class="tagline">Pilih modul untuk <b>memulai misi</b> trading</p>
+  <div class="cards">
+    <a class="card lab" href="ihsg-lab.html" onmousemove="_tilt(event,this)" onmouseleave="_untilt(this)">
+      <span class="card-num">01</span>
+      <span class="card-tag">// MODULE_01</span>
+      <span class="card-icon">🧪</span>
+      <div class="card-name">IHSG LAB</div>
+      <div class="card-desc">Backtesting &amp; analisis win rate. Bedah perilaku broker, cari pola kemenangan tiap emiten.</div>
+      <div class="card-feats"><span class="feat">WIN RATE</span><span class="feat">BACKTEST</span><span class="feat">BROKER AI</span><span class="feat">RANKING</span></div>
+      <div class="card-enter">ENTER LAB <span class="arrow">→</span></div>
+    </a>
+    <a class="card hub" href="ihsg-intelligence-hub.html" onmousemove="_tilt(event,this)" onmouseleave="_untilt(this)">
+      <span class="card-num">02</span>
+      <span class="card-tag">// MODULE_02</span>
+      <span class="card-icon">📡</span>
+      <div class="card-name">INTELLIGENCE HUB</div>
+      <div class="card-desc">Sinyal scalping real-time. HAKA/HAKI alert, smart money, support &amp; resistance live.</div>
+      <div class="card-feats"><span class="feat">SCALPING</span><span class="feat">LIVE ALERT</span><span class="feat">SMART MONEY</span><span class="feat">S/R</span></div>
+      <div class="card-enter">ENTER HUB <span class="arrow">→</span></div>
+    </a>
+  </div>
+</div>
+
+<div class="hud-bottom">
+  <div class="corner">[ IHSG_SUITE v1.0 ]</div>
+  <div class="corner" id="fps">[ -- FPS ]</div>
+  <div class="corner">[ © 2026 ]</div>
+</div>
+<div class="scanlines"></div>
+<div class="vignette"></div>
+
+<script>
+const canvas=document.getElementById('bg-canvas'),ctx=canvas.getContext('2d');
+let W,H,DPR;
+function resize(){DPR=Math.min(window.devicePixelRatio||1,2);W=canvas.width=innerWidth*DPR;H=canvas.height=innerHeight*DPR;canvas.style.width=innerWidth+'px';canvas.style.height=innerHeight+'px';}
+resize();addEventListener('resize',resize);
+let mx=.5,my=.5;
+addEventListener('mousemove',e=>{mx=e.clientX/innerWidth;my=e.clientY/innerHeight;});
+const candles=[],COLS=38;
+function initCandles(){candles.length=0;for(let i=0;i<COLS;i++){candles.push({x:Math.random(),y:Math.random()*H,speed:(0.3+Math.random()*0.9)*DPR,w:(4+Math.random()*5)*DPR,bodyH:(10+Math.random()*40)*DPR,wick:(8+Math.random()*16)*DPR,up:Math.random()>0.5,alpha:0.12+Math.random()*0.4,depth:0.3+Math.random()*0.7});}}
+initCandles();
+const stars=[];for(let i=0;i<90;i++){stars.push({x:Math.random()*W,y:Math.random()*H,z:Math.random(),r:Math.random()*1.5*DPR});}
+let wavePhase=0;const wavePts=60;
+let lastT=performance.now(),frames=0,fps=0,fpsT=0;
+function draw(now){
+  const dt=now-lastT;lastT=now;frames++;fpsT+=dt;
+  if(fpsT>=1000){fps=frames;frames=0;fpsT=0;document.getElementById('fps').textContent='[ '+fps+' FPS ]';}
+  ctx.clearRect(0,0,W,H);
+  const g=ctx.createRadialGradient(W*0.5,H*0.42,0,W*0.5,H*0.42,Math.max(W,H)*0.75);
+  g.addColorStop(0,'rgba(8,20,40,0.6)');g.addColorStop(1,'rgba(3,6,13,0)');
+  ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+  const px=(mx-.5)*30*DPR,py=(my-.5)*30*DPR;
+  stars.forEach(s=>{const ox=px*s.z,oy=py*s.z;ctx.beginPath();ctx.arc(s.x+ox,s.y+oy,s.r,0,6.28);ctx.fillStyle='rgba(120,170,220,'+(0.2+s.z*0.5)+')';ctx.fill();});
+  candles.forEach(c=>{
+    c.y+=c.speed;
+    if(c.y-c.bodyH>H){c.y=-c.wick*2;c.x=Math.random();c.up=Math.random()>0.5;}
+    const x=c.x*W+px*c.depth,col=c.up?'0,255,157':'255,46,136',a=c.alpha*c.depth;
+    ctx.strokeStyle='rgba('+col+','+a+')';ctx.lineWidth=1*DPR;
+    ctx.beginPath();ctx.moveTo(x,c.y-c.wick);ctx.lineTo(x,c.y+c.bodyH+c.wick);ctx.stroke();
+    ctx.fillStyle='rgba('+col+','+a+')';ctx.fillRect(x-c.w/2,c.y,c.w,c.bodyH);
+    if(c.depth>0.75){ctx.shadowColor='rgba('+col+',0.8)';ctx.shadowBlur=12*DPR;ctx.fillRect(x-c.w/2,c.y,c.w,c.bodyH);ctx.shadowBlur=0;}
+  });
+  wavePhase+=0.02;
+  ctx.beginPath();
+  for(let i=0;i<=wavePts;i++){const wx=(i/wavePts)*W;const wy=H*0.82+Math.sin(i*0.4+wavePhase)*22*DPR+Math.sin(i*0.13+wavePhase*1.7)*36*DPR;i===0?ctx.moveTo(wx,wy):ctx.lineTo(wx,wy);}
+  ctx.strokeStyle='rgba(0,212,255,0.25)';ctx.lineWidth=1.5*DPR;ctx.shadowColor='rgba(0,212,255,0.6)';ctx.shadowBlur=10*DPR;ctx.stroke();ctx.shadowBlur=0;
+  requestAnimationFrame(draw);
+}
+requestAnimationFrame(draw);
+function _tilt(e,el){const r=el.getBoundingClientRect();const cx=e.clientX-r.left,cy=e.clientY-r.top;const rx=((cy/r.height)-.5)*-8;const ry=((cx/r.width)-.5)*8;el.style.transform='translateY(-10px) scale(1.02) perspective(800px) rotateX('+rx+'deg) rotateY('+ry+'deg)';el.style.setProperty('--mx',(cx/r.width*100)+'%');el.style.setProperty('--my',(cy/r.height*100)+'%');}
+function _untilt(el){el.style.transform='';}
+function tick(){const d=new Date();document.getElementById('clock').textContent=String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')+':'+String(d.getSeconds()).padStart(2,'0');}
+setInterval(tick,1000);tick();
+(function(){const t=document.getElementById('ticker');const ihsgVal=(7100+Math.random()*200).toFixed(0);const volVal=(8+Math.random()*4).toFixed(1)+'T';t.children[0].innerHTML='IHSG <b>'+ihsgVal+'</b>';t.children[1].innerHTML='VOL <b>Rp'+volVal+'</b>';})();
+</script>
+</body>
+</html>
